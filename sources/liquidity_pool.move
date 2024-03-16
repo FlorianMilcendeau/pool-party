@@ -156,6 +156,7 @@ module overmind::liquidity_pool {
     //==============================================================================================
     // Constants - Add your constants here (if any)
     //==============================================================================================
+    const MINIMUM_LIQUIDITY_COIN: u64 = 1000;
 
     //==============================================================================================
     // Error codes - DO NOT MODIFY
@@ -210,7 +211,24 @@ module overmind::liquidity_pool {
         coin_b: Coin<CoinB>,
         ctx: &mut TxContext
     ): Coin<LPCoin<CoinA, CoinB>> {
+        let liquidity_amount = math::sqrt(coin::value(&coin_a) * coin::value(&coin_b));
+        assert!(liquidity_amount >= MINIMUM_LIQUIDITY_COIN, EInsufficientLiquidity);
         
+        let lp_supply = balance::create_supply(LPCoin<CoinA, CoinB> {});
+
+        let initial_lp_coin_reserve = balance::increase_supply(&mut lp_supply, MINIMUM_LIQUIDITY_COIN);
+        let lp_coin = balance::increase_supply(&mut lp_supply, liquidity_amount - balance::value(&initial_lp_coin_reserve));
+
+        let lp_pool = LiquidityPool {
+            id: object::new(ctx),
+            coin_a_balance: coin::into_balance(coin_a),
+            coin_b_balance: coin::into_balance(coin_b),
+            lp_coin_supply: lp_supply,
+            initial_lp_coin_reserve,
+        };
+
+        transfer::share_object(lp_pool);
+        coin::from_balance(lp_coin, ctx)
     }
 
     /* 

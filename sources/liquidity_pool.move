@@ -284,7 +284,22 @@ module overmind::liquidity_pool {
         pool: &mut LiquidityPool<CoinA, CoinB>,
         ctx: &mut TxContext
     ): (Coin<CoinA>, Coin<CoinB>) {
-        
+        let amount_lp_coins = coin::value(&lp_coins_to_redeem);
+        assert!(amount_lp_coins > 0, EInsufficientLiquidity);
+
+        let amount_coin_a_reserve = balance::value(&pool.coin_a_balance);
+        let amount_coin_b_reserve = balance::value(&pool.coin_b_balance);
+        let lp_coins_total_supply = balance::supply_value(&pool.lp_coin_supply);
+
+        let amount_coin_a_to_redeem = amount_lp_coins * amount_coin_a_reserve / lp_coins_total_supply;
+        let amount_coin_b_to_redeem = amount_lp_coins * amount_coin_b_reserve / lp_coins_total_supply;
+
+        let coin_a = coin::take(&mut pool.coin_a_balance, amount_coin_a_to_redeem, ctx);
+        let coin_b = coin::take(&mut pool.coin_b_balance, amount_coin_b_to_redeem, ctx);
+        balance::decrease_supply(&mut pool.lp_coin_supply, coin::into_balance(lp_coins_to_redeem));
+
+
+        (coin_a, coin_b)
     }
 
     /*

@@ -319,7 +319,10 @@ module overmind::liquidity_pool {
         min_amount_coin_b_out: u64,
         ctx: &mut TxContext
     ): Coin<CoinB> {
-        
+        assert!(coin::value(&coin_a_in) > 0, EInvalidSwapParameters);
+
+        let coin_b_out = swap_coins(coin_a_in, min_amount_coin_b_out, &mut pool.coin_a_balance, &mut pool.coin_b_balance, ctx);
+        coin_b_out
     }
 
     /*
@@ -339,7 +342,10 @@ module overmind::liquidity_pool {
         min_amount_coin_a_out: u64,
         ctx: &mut TxContext
     ): Coin<CoinA> {
+        assert!(coin::value(&coin_b_in) > 0, EInvalidSwapParameters);
         
+        let coin_a_out = swap_coins(coin_b_in, min_amount_coin_a_out, &mut pool.coin_b_balance, &mut pool.coin_a_balance, ctx);
+        coin_a_out
     }
 
     /*
@@ -359,7 +365,17 @@ module overmind::liquidity_pool {
         pool: &mut LiquidityPool<CoinA, CoinB>,
         ctx: &mut TxContext
     ): Coin<CoinB> {
-        
+        assert!(coin::value(max_coin_a_in) > 0, EInvalidSwapParameters);
+        assert!(amount_coin_b_out > 0, EInvalidSwapParameters);
+
+        let constant = get_constant(&pool.coin_a_balance, &pool.coin_b_balance);
+        let amount_coin_a_in = ((constant / (balance::value(&pool.coin_b_balance) - amount_coin_b_out)) - balance::value(&pool.coin_a_balance));
+
+        assert!(coin::value(max_coin_a_in) >= amount_coin_a_in, ESlippageLimitExceeded);
+
+        let coin_a_in = coin::split(max_coin_a_in, amount_coin_a_in, ctx);
+        let coin_a_out = swap_coins(coin_a_in, amount_coin_b_out, &mut pool.coin_a_balance, &mut pool.coin_b_balance, ctx);
+        coin_a_out
     }   
 
     /*
@@ -379,7 +395,33 @@ module overmind::liquidity_pool {
         pool: &mut LiquidityPool<CoinA, CoinB>,
         ctx: &mut TxContext
     ): Coin<CoinA> {
+        assert!(coin::value(max_coin_b_in) > 0, EInvalidSwapParameters);
+        assert!(amount_coin_a_out > 0, EInvalidSwapParameters);
+
+        let constant = get_constant(&pool.coin_a_balance, &pool.coin_b_balance);
+        let amount_coin_b_in = ((constant / (balance::value(&pool.coin_a_balance) - amount_coin_a_out)) - balance::value(&pool.coin_b_balance));
+
+        assert!(coin::value(max_coin_b_in) >= amount_coin_b_in, ESlippageLimitExceeded);
+
+        let coin_b_in = coin::split(max_coin_b_in, amount_coin_b_in, ctx);
+        let coin_a_out = swap_coins(coin_b_in, amount_coin_a_out, &mut pool.coin_b_balance, &mut pool.coin_a_balance, ctx);
+        coin_a_out
+    }
+
+    fun swap_coins<CoinIn, CoinOut>(coin_in: Coin<CoinIn>, min_amount_coin_out: u64, balance_in: &mut Balance<CoinIn>, balance_out: &mut Balance<CoinOut>, ctx: &mut TxContext): Coin<CoinOut> {
+        let constant = get_constant(balance_in, balance_out);
+        let amount_coin_out = balance::value(balance_out) - (constant / (balance::value(balance_in) + coin::value(&coin_in)));
+
+        assert!(amount_coin_out >= min_amount_coin_out, ESlippageLimitExceeded);
+
+        coin::put(balance_in, coin_in);
+        let coin_out = coin::take(balance_out, amount_coin_out, ctx);
         
+        coin_out
+    }
+
+    fun get_constant<CoinIn, CoinOut>(balance_a: &Balance<CoinIn>, balance_b: &Balance<CoinOut>): u64 {
+        balance::value(balance_a) * balance::value(balance_b)
     }
 
     //==============================================================================================
